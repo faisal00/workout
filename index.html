@@ -143,7 +143,9 @@ canvas{display:block}
 .count-row{display:flex;gap:10px;justify-content:center;margin-bottom:10px}
 .count-n{width:42px;height:42px;border-radius:12px;background:var(--bg4);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:var(--dim);transition:all .1s;border:2px solid transparent}
 .count-n.on-sound{background:#e8f3ff;border-color:var(--blue);color:var(--blue);transform:scale(1.12)}
+.count-n.on-accent{background:#fff0e8;border-color:var(--orange);color:var(--orange);transform:scale(1.18);box-shadow:0 0 12px rgba(255,149,0,.3)}
 .count-n.on-silence{background:#fff8ee;border-color:var(--orange);color:var(--orange);transform:scale(1.08)}
+.count-n.accent-idle{border-color:rgba(255,149,0,.35);color:var(--orange);background:rgba(255,149,0,.06)}
 
 .beat-phase-txt{font-size:18px;font-weight:700;min-height:26px;color:var(--blue);margin-bottom:4px}
 .beat-phase-txt.up{color:var(--orange)}
@@ -291,11 +293,13 @@ canvas{display:block}
   <div class="snd-row" id="snd-row"></div>
 
   <div class="beat-guide">
-    <div class="bg-title">🎓 Come funziona l'allenamento</div>
+    <div class="bg-title">🎓 Come funziona</div>
     <div class="bg-txt">
-      <b>2 cicli CON suono</b> → senti e segui il beat<br>
-      <b>2 cicli SENZA suono</b> → il cerchio continua a muoversi, tu mantieni il ritmo in testa<br>
-      Il contatore 1-2-3-4 non si ferma mai — così puoi vedere se sei rimasto a tempo quando il suono torna 🎯
+      <b>1 rep = 4 battute</b> · i tempi <b style="color:var(--orange)">1</b> e <b style="color:var(--orange)">3</b> sono accentuati (suono forte)<br>
+      <b>⬇ Battuta 1-2</b> → abbassa il peso lentamente<br>
+      <b>⬆ Battuta 3-4</b> → solleva il peso lentamente<br><br>
+      <b>2 cicli CON suono</b> → senti e sincronizzati<br>
+      <b>2 cicli SENZA suono</b> → il cerchio continua a muoversi, tu mantieni il ritmo in testa 🎯
     </div>
   </div>
 
@@ -840,17 +844,50 @@ function setCustomBpm(v){
 }
 function setSound(s){soundType=s;sj("snd4",s);renderBeatUI()}
 
+// iOS richiede AudioContext creato/ripreso dentro evento utente
+function unlockAudio(){
+  if(!audioCtx) audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+  if(audioCtx.state==="suspended") audioCtx.resume();
+  // Silent buffer per sbloccare completamente su iOS
+  try{
+    const buf=audioCtx.createBuffer(1,1,22050);
+    const src=audioCtx.createBufferSource();
+    src.buffer=buf;src.connect(audioCtx.destination);src.start(0);
+  }catch(e){}
+}
+
+// accent = true sui tempi 1 e 3 (forti), false su 2 e 4 (deboli)
 function playSound(accent){
   try{
-    if(!audioCtx)audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+    if(!audioCtx||audioCtx.state==="suspended") return;
     const o=audioCtx.createOscillator(),g=audioCtx.createGain();
     o.connect(g);g.connect(audioCtx.destination);
     const t=audioCtx.currentTime;
-    if(soundType==="click"){o.frequency.value=accent?1100:700;g.gain.setValueAtTime(accent?.5:.25,t);g.gain.exponentialRampToValueAtTime(.001,t+.04);o.start(t);o.stop(t+.04)}
-    else if(soundType==="beep"){o.frequency.value=accent?880:660;g.gain.setValueAtTime(accent?.4:.2,t);g.gain.exponentialRampToValueAtTime(.001,t+.08);o.start(t);o.stop(t+.08)}
-    else if(soundType==="bell"){o.type="sine";o.frequency.value=accent?1047:784;g.gain.setValueAtTime(accent?.3:.15,t);g.gain.exponentialRampToValueAtTime(.001,t+.35);o.start(t);o.stop(t+.35)}
-    else if(soundType==="kick"){o.type="sine";o.frequency.value=accent?160:80;o.frequency.exponentialRampToValueAtTime(.01,t+.1);g.gain.setValueAtTime(accent?.6:.3,t);g.gain.exponentialRampToValueAtTime(.001,t+.15);o.start(t);o.stop(t+.15)}
-  }catch(e){}
+    if(soundType==="click"){
+      o.frequency.value=accent?1200:600;
+      g.gain.setValueAtTime(accent?.7:.2,t);
+      g.gain.exponentialRampToValueAtTime(.001,t+(accent?.07:.04));
+      o.start(t);o.stop(t+(accent?.07:.04));
+    } else if(soundType==="beep"){
+      o.frequency.value=accent?1000:500;
+      g.gain.setValueAtTime(accent?.6:.18,t);
+      g.gain.exponentialRampToValueAtTime(.001,t+(accent?.1:.06));
+      o.start(t);o.stop(t+(accent?.1:.06));
+    } else if(soundType==="bell"){
+      o.type="sine";
+      o.frequency.value=accent?1200:600;
+      g.gain.setValueAtTime(accent?.5:.15,t);
+      g.gain.exponentialRampToValueAtTime(.001,t+(accent?.4:.2));
+      o.start(t);o.stop(t+(accent?.4:.2));
+    } else if(soundType==="kick"){
+      o.type="sine";
+      o.frequency.value=accent?200:80;
+      o.frequency.exponentialRampToValueAtTime(0.01,t+.12);
+      g.gain.setValueAtTime(accent?.8:.3,t);
+      g.gain.exponentialRampToValueAtTime(.001,t+.18);
+      o.start(t);o.stop(t+.18);
+    }
+  }catch(e){console.log("Audio:",e)}
 }
 
 function startBeat(){
@@ -859,10 +896,11 @@ function startBeat(){
   updateCycleUI();
   beatTmr=setInterval(()=>{
     beatCnt++;
-    // Which beat in 4/4
-    const beatInCycle=(beatCnt-1)%BEATS_PER_CYCLE; // 0-3
-    const isDownbeat=beatInCycle===0;
-    // Which cycle (groups of 4 beats)
+    const beatInCycle=(beatCnt-1)%BEATS_PER_CYCLE; // 0=t1,1=t2,2=t3,3=t4
+    // Tempi 1 e 3 accentuati
+    const isAccent=(beatInCycle===0||beatInCycle===2);
+    // Movimento: 1-2 = abbassa, 3-4 = solleva
+    const isDown=(beatInCycle===0||beatInCycle===1);
     if(beatInCycle===0){
       totalCycles++;
       const cycleInGroup=(totalCycles-1)%(CYCLES_SOUND+CYCLES_SILENCE);
@@ -873,32 +911,42 @@ function startBeat(){
     const phase=document.getElementById("beat-phase");
     const info=document.getElementById("beat-info");
     const lbl=document.getElementById("beat-mode-lbl");
-    // Update 1-2-3-4 counter
+    // Contatore 1-2-3-4: tempi 1 e 3 hanno stile accent-idle quando non attivi
     for(let i=0;i<4;i++){
       const el=document.getElementById("cn"+i);
-      el.className="count-n"+(i===beatInCycle?(inSilence?" on-silence":" on-sound"):"");
+      const isCurrent=i===beatInCycle;
+      const isAccentBeat=(i===0||i===2);
+      let cls="count-n";
+      if(isCurrent) cls+=inSilence?" on-silence":(isAccentBeat?" on-accent":" on-sound");
+      else if(isAccentBeat) cls+=" accent-idle";
+      el.className=cls;
     }
     if(inSilence){
       ring.className="pulse-ring silent";
-      phase.textContent="🔇 Mantieni il ritmo";
+      ring.style.transform=isAccent?"scale(1.05)":"scale(1)";
+      ring.style.opacity=isAccent?"1":".6";
+      phase.textContent=isDown?"🔇 Abbassa (silenzio)":"🔇 Solleva (silenzio)";
       phase.className="beat-phase-txt silent";
-      lbl.textContent="SILENZIO — tieni il tempo in testa";
+      lbl.textContent="SILENZIO — mantieni il ritmo in testa";
       lbl.className="beat-mode-label silence";
-      info.textContent=`${bpm} BPM · fase ${beatInCycle+1}/4`;
-      // Visual pulsing without sound
-      ring.style.opacity=isDownbeat?"1":".7";
+      info.textContent=`Battuta ${beatInCycle+1}/4 · ${bpm} BPM`;
     } else {
-      const accent=isDownbeat;
-      ring.className="pulse-ring "+(accent?"beat-down":"beat-up");
-      phase.textContent=accent?"⬇ Abbassa":"⬆ Solleva";
-      phase.className="beat-phase-txt"+(accent?"":" up");
-      lbl.textContent="CON SUONO — segui il beat";
+      ring.style.transform="";ring.style.opacity="1";
+      ring.className="pulse-ring "+(isDown?"beat-down":"beat-up");
+      if(beatInCycle===0)      phase.textContent="⬇ 1 — Inizia ad abbassare";
+      else if(beatInCycle===1) phase.textContent="⬇ 2 — Continua giù";
+      else if(beatInCycle===2) phase.textContent="⬆ 3 — Inizia a sollevare";
+      else                     phase.textContent="⬆ 4 — Continua su";
+      phase.className="beat-phase-txt"+(isDown?"":" up");
+      lbl.textContent="CON SUONO · 1↓ 2↓ 3↑ 4↑";
       lbl.className="beat-mode-label sound";
-      info.textContent=`${bpm} BPM · 1 fase ogni ${(60/bpm).toFixed(1)}s`;
-      ring.style.opacity="1";
-      playSound(accent);
+      info.textContent=`1 rep = 4 battute · ${(240/bpm).toFixed(1)}s`;
+      playSound(isAccent);
     }
-    setTimeout(()=>{if(!inSilence)ring.className="pulse-ring on";ring.style.opacity="1";},70);
+    setTimeout(()=>{
+      if(!inSilence){ring.className="pulse-ring on";ring.style.transform="";}
+      ring.style.opacity="1";
+    },90);
   },iv);
 }
 
@@ -922,6 +970,7 @@ function updateCycleUI(){
 }
 
 function toggleBeat(){
+  unlockAudio(); // FONDAMENTALE su iOS: dentro evento click
   beatOn=!beatOn;
   const btn=document.getElementById("play-btn");
   const ring=document.getElementById("pulse-ring");
