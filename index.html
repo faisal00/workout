@@ -7,10 +7,12 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
 <meta name="apple-mobile-web-app-title" content="Workout"/>
-<meta name="theme-color" content="#f2f2f7"/>
+<meta name="color-scheme" content="light only"/>
+<meta name="supported-color-schemes" content="light"/>
 <title>Workout · Faisal</title>
 <style>
 :root{
+  color-scheme: light only;
   --bg:#f2f2f7;--bg2:#ffffff;--bg3:#f2f2f7;--bg4:#e5e5ea;
   --border:#d1d1d6;--text:#1c1c1e;--text2:#3a3a3c;--muted:#8e8e93;--dim:#aeaeb2;
   --blue:#007aff;--green:#34c759;--green2:#30d158;--red:#ff3b30;
@@ -19,7 +21,7 @@
   --shadow-lg:0 4px 20px rgba(0,0,0,.1);
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',sans-serif;overscroll-behavior:none}
+html,body{height:100%;background:#f2f2f7!important;color:#1c1c1e!important;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',sans-serif;overscroll-behavior:none;color-scheme:light}
 #app{max-width:480px;margin:0 auto;min-height:100vh;padding-bottom:90px}
 
 .hdr{background:rgba(242,242,247,.94);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(–border);padding:50px 18px 12px;position:sticky;top:0;z-index:200}
@@ -325,7 +327,7 @@ canvas{display:block}
     <div class="beat-info-txt" id="beat-info"></div>
   </div>
 
-  <div id="audio-unlock-banner" style="background:#fff3cd;border:1.5px solid #ffc107;border-radius:14px;padding:14px;margin-bottom:14px;text-align:center">
+  <div id="audio-unlock-banner" style="background:#fff3cd;border:1.5px solid #ffc107;border-radius:14px;padding:14px;margin-bottom:14px;text-align:center;display:none">
     <div style="font-size:20px;margin-bottom:6px">🔇</div>
     <div style="font-size:14px;font-weight:700;color:#856404;margin-bottom:8px">Prima di iniziare</div>
     <div style="font-size:12px;color:#856404;margin-bottom:12px">Tocca il bottone per attivare l'audio su iPhone</div>
@@ -334,7 +336,7 @@ canvas{display:block}
     </button>
   </div>
 
-<button class="play-big play" id="play-btn" onclick="toggleBeat()" style="opacity:.35;pointer-events:none">▶ PLAY</button>
+<button class="play-big play" id="play-btn" onclick="toggleBeat()">▶ PLAY</button>
 
 </div>
 
@@ -999,7 +1001,19 @@ function updateCycleUI(){
 }
 
 function toggleBeat(){
-  if(!audioCtx2){alert("Prima tocca 🔊 Attiva Audio!");return;}
+  // Inizializza audio al primo tocco — funziona su iOS perché siamo dentro un evento utente
+  if(!audioCtx2){
+    try{
+      audioCtx2=new(window.AudioContext||window.webkitAudioContext)();
+      if(audioCtx2.state==="suspended") audioCtx2.resume();
+      // Suono silenzioso per sbloccare iOS
+      const o=audioCtx2.createOscillator(),g=audioCtx2.createGain();
+      o.connect(g);g.connect(audioCtx2.destination);
+      g.gain.setValueAtTime(0.001,audioCtx2.currentTime);
+      o.start(audioCtx2.currentTime);
+      o.stop(audioCtx2.currentTime+0.05);
+    }catch(e){console.log("Audio init:",e)}
+  }
   beatOn=!beatOn;
   const btn=document.getElementById("play-btn");
   const ring=document.getElementById("pulse-ring");
