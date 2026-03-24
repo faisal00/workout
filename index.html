@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+  <!DOCTYPE html>
 <html lang="it">
 <head>
 <meta charset="UTF-8"/>
@@ -320,7 +320,16 @@ canvas{display:block}
     <div class="beat-info-txt" id="beat-info"></div>
   </div>
 
-  <button class="play-big play" id="play-btn" onclick="toggleBeat()">▶ PLAY</button>
+  <div id="audio-unlock-banner" style="background:#fff3cd;border:1.5px solid #ffc107;border-radius:14px;padding:14px;margin-bottom:14px;text-align:center;display:block">
+    <div style="font-size:20px;margin-bottom:6px">🔇</div>
+    <div style="font-size:14px;font-weight:700;color:#856404;margin-bottom:8px">Tocca per attivare l'audio</div>
+    <div style="font-size:12px;color:#856404;margin-bottom:12px">iOS richiede questo passaggio prima di suonare</div>
+    <button onclick="activateAudio()" style="background:#ff9500;border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:700;padding:12px 28px;cursor:pointer;font-family:inherit;width:100%">
+      🔊 Attiva Audio
+    </button>
+  </div>
+
+  <button class="play-big play" id="play-btn" onclick="toggleBeat()" style="opacity:.4;pointer-events:none">▶ PLAY</button>
 </div>
 
 <!-- CALENDARIO -->
@@ -844,16 +853,37 @@ function setCustomBpm(v){
 }
 function setSound(s){soundType=s;sj("snd4",s);renderBeatUI()}
 
-// iOS richiede AudioContext creato/ripreso dentro evento utente
 function unlockAudio(){
   if(!audioCtx) audioCtx=new(window.AudioContext||window.webkitAudioContext)();
   if(audioCtx.state==="suspended") audioCtx.resume();
-  // Silent buffer per sbloccare completamente su iOS
   try{
     const buf=audioCtx.createBuffer(1,1,22050);
     const src=audioCtx.createBufferSource();
     src.buffer=buf;src.connect(audioCtx.destination);src.start(0);
   }catch(e){}
+}
+
+function activateAudio(){
+  // Crea AudioContext dentro tocco utente — unico modo garantito su iOS
+  try{
+    audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+    // Suona un beep silenzioso per sbloccare completamente
+    const o=audioCtx.createOscillator(),g=audioCtx.createGain();
+    o.connect(g);g.connect(audioCtx.destination);
+    g.gain.setValueAtTime(.001,audioCtx.currentTime);
+    o.start(audioCtx.currentTime);
+    o.stop(audioCtx.currentTime+.1);
+    // Nascondi banner, abilita play
+    document.getElementById("audio-unlock-banner").style.display="none";
+    const btn=document.getElementById("play-btn");
+    btn.style.opacity="1";
+    btn.style.pointerEvents="auto";
+    // Feedback visivo
+    btn.textContent="▶ PLAY — Audio attivo 🔊";
+    setTimeout(()=>{btn.textContent="▶ PLAY"},1500);
+  }catch(e){
+    alert("Errore audio: "+e.message);
+  }
 }
 
 // accent = true sui tempi 1 e 3 (forti), false su 2 e 4 (deboli)
